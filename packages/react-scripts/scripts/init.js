@@ -174,10 +174,11 @@ module.exports = function(
   const templateScripts = templatePackage.scripts || templateJson.scripts || {};
   appPackage.scripts = Object.assign(
     {
-      start: 'react-scripts start',
-      build: 'react-scripts build',
-      test: 'react-scripts test',
-      eject: 'react-scripts eject',
+      start: 'react-scripts-with-ssr start',
+      build: 'react-scripts-with-ssr build',
+      test: 'react-scripts-with-ssr test',
+      eject: 'react-scripts-with-ssr eject',
+      serve: 'react-scripts-with-ssr serve',
     },
     templateScripts
   );

@@ -23,5 +23,6 @@
   "files": [
     "template",
     "template.json"
-  ]
+  ],
+  "devDependencies": {}
 }
