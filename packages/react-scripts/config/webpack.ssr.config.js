@@ -1,81 +1,102 @@
 'use strict';
 
-const webpack = require('webpack');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const ForkTsCheckerWebpackPlugin = require('react-dev-utils/ForkTsCheckerWebpackPlugin');
-const nodeExternals = require('webpack-node-externals');
 const webpackConfigFactory = require('./webpack.config.js');
 const paths = require('./paths');
-const getClientEnvironment = require('./env');
-const env = getClientEnvironment('');
+const path = require('path');
+const ForkTsCheckerNotifierWebpackPlugin = require('fork-ts-checker-notifier-webpack-plugin');
+const PnpWebpackPlugin = require('pnp-webpack-plugin');
+
+const main = [
+  'core-js',
+  'whatwg-fetch',
+  './src/index.tsx',
+  './src/index.ssr.tsx',
+];
+
+function getBaseConfig(webpackEnv) {
+  const template = webpackConfigFactory(webpackEnv);
+
+  return {
+    ...template,
+    context: process.cwd(), // to automatically find tsconfig.json
+    entry: {
+      main,
+    },
+    output: {
+      path: path.resolve(__dirname, 'dist'),
+      filename: '[name].js',
+      publicPath: '/',
+    },
+    plugins: [
+      new ForkTsCheckerWebpackPlugin(
+        PnpWebpackPlugin.forkTsCheckerOptions({
+          tslint: true,
+          useTypescriptIncrementalApi: false, // not possible to use this until: https://github.com/microsoft/TypeScript/issues/31056
+        })
+      ),
+      new ForkTsCheckerNotifierWebpackPlugin({
+        title: 'TypeScript',
+        excludeWarnings: false,
+      }),
+      new HtmlWebpackPlugin({
+        inject: true,
+        template: 'src/index.html',
+      }),
+    ],
+    module: {
+      rules: [
+        {
+          test: /.tsx?$/,
+          loader: require.resolve('ts-loader'),
+          options: PnpWebpackPlugin.tsLoaderOptions({ transpileOnly: true }),
+        },
+      ],
+    },
+    resolve: {
+      extensions: ['.ts', '.tsx', '.js'],
+      plugins: [PnpWebpackPlugin],
+    },
+    resolveLoader: {
+      plugins: [PnpWebpackPlugin.moduleLoader(module)],
+    },
+    devtool: 'inline-source-map',
+    devServer: {
+      clientLogLevel: 'warning',
+      open: true,
+      historyApiFallback: true,
+      stats: 'errors-only',
+    },
+  };
+}
 
 // decorate original webpack config
 module.exports = function(webpackEnv) {
-  const template = webpackConfigFactory(webpackEnv);
-  // multi compiler config (client + server)
+  const clientConfig = getBaseConfig(webpackEnv);
+
   return [
     // ssr compiler config
     {
-      ...template,
+      ...clientConfig,
       name: 'ssr',
       target: 'node',
       entry: [
         // ssr entry point, usually s.th. like `./src/index.ssr.tsx` with `export default (req,res) => {}`
         paths.appIndexSsrJs,
       ],
-      output: {
-        ...template.output,
-        filename: 'ssr.js',
-        libraryTarget: 'commonjs2',
-      },
       optimization: {
-        ...template.optimization,
+        ...clientConfig.optimization,
         // disable chunk splitting
         splitChunks: {},
         runtimeChunk: false,
       },
-      // filter out some plugins
-      plugins: template.plugins
-        .filter(plugin =>
-          [
-            // do not generate an additional index.html for ssr
-            HtmlWebpackPlugin,
-            // avoid overriding process.env on the server, we will provide a customized DefinePlugin
-            webpack.DefinePlugin,
-          ].every(pluginClass => !(plugin instanceof pluginClass))
-        )
-        .concat([
-          // modified version of the DefinePlugin that does not override but extend process.env
-          // this will preserve embedded env vars but also allow reading real env vars on the server
-          new webpack.DefinePlugin(
-            Object.keys(env.raw).reduce(
-              (newEnv, key) => ({
-                ...newEnv,
-                // this will result in s.th. like: process.env.FOO = process.env.FOO || "embedded default value"
-                ['process.env.' + key]:
-                  'process.env.' + key + '||' + JSON.stringify(env.raw[key]),
-              }),
-              {}
-            )
-          ),
-        ]),
-      externals: [nodeExternals()],
     },
+
     // client compiler config
     {
-      // use original config
-      ...template,
+      ...clientConfig,
       name: 'client',
-      output: {
-        ...template.output,
-      },
-      // filter out some plugins
-      plugins: template.plugins.filter(plugin =>
-        [
-          // seems to break multicompiler dev server watch mode
-          ForkTsCheckerWebpackPlugin,
-        ].every(pluginClass => !(plugin instanceof pluginClass))
-      ),
     },
   ];
 };
